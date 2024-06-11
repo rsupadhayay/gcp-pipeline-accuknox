@@ -1,9 +1,46 @@
 steps:
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', '${_IMAGE_URL}:${_IMAGE_TAG}', '.']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/${_IMAGE_URL}:${_IMAGE_TAG}']
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_IMAGE_URL}:${_IMAGE_TAG}', '.']
+
+  # Step 2: Push the Docker image to GCR
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_IMAGE_URL}:${_IMAGE_TAG}']
+
+  # Step 3: Scan the container image with AccuKnox and save the report
+  - name: 'accuknox/accuknox-container-scan'
+    args: ['image', '--format', 'json', '--output', '/workspace/accuknox-report.json', '${_IMAGE_URL}:${_IMAGE_TAG}']
+    id: 'accuknox-container-scan'
+
+  # Step 4: Upload the AccuKnox report to Cloud Storage
+  - name: 'gcr.io/cloud-builders/gsutil'
+    args: ['cp', '/workspace/accuknox-report.json', 'gs://accuknox-pipeline/accuknox-report.json']
+    waitFor: ['accuknox-container-scan']
+
+  # Step 5: Print the AccuKnox container scan results
+  - name: 'ubuntu'
+    entrypoint: 'cat'
+    args: ['/workspace/accuknox-report.json']
+
+  # Step 6: Forward the logs to the SaaS platform using curl
+  - name: 'gcr.io/cloud-builders/curl'
+    entrypoint: 'bash'
+    args:
+      [
+        '-c',
+        'curl --location --request POST "https://${_CSPM_URL}/api/v1/artifact/?tenant_id=${_TENANT_ID}&data_type=TR&save_to_s3=false"  --header "Tenant-Id: 2245" --header "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ0NzE1NzIwLCJqdGkiOiJiNzYxNmQ1NmRiZWU0ZWVhYjdiZjc3NDJhNmJkMzVhMCIsImlzcyI6ImNzcG0uZGVtby5hY2N1a25veC5jb20ifQ.ENT7bvSvqmmxsnopOGN4-_aS9XJgtPLY635d16_Tc2B0MOaHIIZUAocPeSZbRXv174tFtkVhWwBLwjiQT9xWT6R2jYIxGK7PkG4EFW_xDMC3M-VNxOQknriWjs4H_9MO2jvnc7ygf-0CSBYxosn5lwMe2rDWWfi3mA7ZullMKMHsaGStVjVO1Qv7TzpucPdAwR4uq49tBm9NRzXu9vNUxkbsEDzFoxpPHnZ7ytcCziwtI1f3dXoDHmuDhQLJewVqyqpbncLGdXXpJE7dB__gtXlnt4gRetrJWtzbG2aUKl-Gh1KYM1WhnoisHyMy7uw26batq3O7dJTvZGRQPBTrUQ" --form "file=@/workspace/accuknox-report.json"'
+      ]
+
 substitutions:
-  _IMAGE_URL: 'gcr.io/gcp-cicd-test-425406/aditya-test'
+  _IMAGE_URL: 'us-central1-docker.pkg.dev/gcb-security-bu/accuaknox/accuknox'
   _IMAGE_TAG: 'latest'
+  _CSPM_URL: 'cspm.demo.accuknox.com'
+  _TENANT_ID: '2245'
+
+images:
+  - 'us-central1-docker.pkg.dev/gcb-security-bu/accuaknox/accuknox:latest'
+
 logsBucket: 'gs://accuknox-pipeline'
+timeout: '1200s'
+#magic
+
