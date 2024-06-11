@@ -4,4 +4,4 @@ This repository contains the official Node.js "hello world" containerized applic
 
 It is an useful example to look for vulnerabilities
 
-To make the image secure, change the reference base image from `node:12` to `bitnami/node`.
+#To make the image secure, change the reference base image from `node:12` to `bitnami/node`.
